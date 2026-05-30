@@ -280,7 +280,7 @@ export default function App() {
   const wingY = currentGeo.wingY;
   const wingHeading = currentGeo.wingHeadingScreen;
 
-  const joined = rangeNm <= 0.01;
+  //const joined = rangeNm <= 0.01;
 
   // =========================
   // SVG GEOMETRY
