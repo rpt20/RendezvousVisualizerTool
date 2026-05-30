@@ -748,7 +748,7 @@ export default function App() {
           {/* Lead aircraft */}
           <g transform={`translate(${leadX},${leadY})`}>
             <image
-              href="/super hornet_transparent background.png"
+              href="${import.meta.env.BASE_URL}/super hornet_transparent background.png"
               x={-20}
               y={-20}
               width={40}
