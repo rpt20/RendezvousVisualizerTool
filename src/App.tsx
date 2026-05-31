@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import "./App.css";
 import superHornet from "./assets/super-hornet.png";
 
@@ -6,7 +6,7 @@ type BearingMode = "F-18" | "T-45";
 
 export default function App() {
   const centerX = 330;
-  const centerY = 285;
+  const centerY = 300;
 
   const SPRITE_OFFSET = 90;
   const leadKIAS = 250;
@@ -16,8 +16,8 @@ export default function App() {
   const [bearingMode, setBearingMode] = useState<BearingMode>("F-18");
   const [leadAltitude, setLeadAltitude] = useState(10000);
   const [wingKIAS, setWingKIAS] = useState(250);
-  const [spawnNm, setSpawnNm] = useState(1.5);
-  const [timeScale, setTimeScale] = useState(1);
+  const [spawnNm, setSpawnNm] = useState(1);
+  const [timeScale, setTimeScale] = useState(4);
   const [paused, setPaused] = useState(false);
 
   const [orbitAngle, setOrbitAngle] = useState(0);
@@ -51,8 +51,7 @@ export default function App() {
     const speedFps = ktas * 1.68781;
 
     const radiusFt =
-      (speedFps * speedFps) /
-      (g * Math.tan(deg(bankAngle)));
+      (speedFps * speedFps) / (g * Math.tan(deg(bankAngle)));
 
     return radiusFt / 6076.12;
   }
@@ -75,10 +74,9 @@ export default function App() {
   const orbitPeriodSeconds = 360 / turnRateDegPerSecond;
 
   // Smooth display scaling from 0 ft to 40,000 ft.
-  // The real turn radius still drives the math, but the displayed circle
-  // smoothly grows as altitude increases instead of snapping/clamping.
+  // The real turn radius drives the math; this only scales the graphic.
   const minDisplayRadiusPx = 120;
-  const maxDisplayRadiusPx = 210;
+  const maxDisplayRadiusPx = 215;
 
   const radiusAt0FtNm = turnRadiusNmFromKtas(kiasToKtas(leadKIAS, 0));
   const radiusAt40000FtNm = turnRadiusNmFromKtas(
@@ -297,19 +295,23 @@ export default function App() {
     const values: number[] = [];
     let r = Math.round(spawnNm * 4) / 4;
 
-    while (r > 0) {
+    while (r > 0 && values.length < 20) {
       values.push(Number(r.toFixed(2)));
       r -= 0.25;
     }
 
-    values.push(0);
+    if (values.length < 20) {
+      values.push(0);
+    }
+
     return values;
   }, [spawnNm]);
+
+  const compactTableRanges = tableRanges.slice(0, 20);
 
   const wingX = currentGeo.wingX;
   const wingY = currentGeo.wingY;
   const wingHeading = currentGeo.wingHeadingScreen;
-
 
   // =========================
   // SVG GEOMETRY
@@ -420,7 +422,7 @@ export default function App() {
   // STYLES
   // =========================
 
-  const pageStyle: React.CSSProperties = {
+  const pageStyle: CSSProperties = {
     minHeight: "100vh",
     background: "#111827",
     color: "white",
@@ -430,7 +432,7 @@ export default function App() {
     overflowX: "hidden",
   };
 
-  const titleStyle: React.CSSProperties = {
+  const titleStyle: CSSProperties = {
     textAlign: "center",
     fontSize: 46,
     fontWeight: 800,
@@ -440,37 +442,45 @@ export default function App() {
     whiteSpace: "nowrap",
   };
 
-  const centerColumnStyle: React.CSSProperties = {
-    width: "min(760px, 100%)",
+  const centerColumnStyle: CSSProperties = {
+    width: "min(900px, 100%)",
     margin: "0 auto",
   };
 
-  const editableTopStyle: React.CSSProperties = {
-    width: "min(430px, 100%)",
-    margin: "0 auto 18px auto",
-    textAlign: "left",
-  };
-
-  const textStyle: React.CSSProperties = {
-    fontSize: 23,
-    lineHeight: 1.45,
-    textAlign: "left",
-  };
-
-  const sliderStyle: React.CSSProperties = {
+  const sliderRowStyle: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 14,
+    alignItems: "end",
     width: "100%",
-    maxWidth: 390,
-    margin: "6px 0 14px",
+    margin: "0 auto 18px",
+  };
+
+  const sliderItemStyle: CSSProperties = {
+    minWidth: 0,
+  };
+
+  const sliderLabelStyle: CSSProperties = {
+    fontSize: 18,
+    fontWeight: 700,
+    lineHeight: 1.25,
+    marginBottom: 4,
+    textAlign: "left",
+    whiteSpace: "nowrap",
+  };
+
+  const sliderStyle: CSSProperties = {
+    width: "100%",
+    margin: 0,
     display: "block",
   };
 
-  const smallSliderStyle: React.CSSProperties = {
-    width: "min(390px, 100%)",
-    margin: "14px auto 16px",
-    display: "block",
+  const bearingRowStyle: CSSProperties = {
+    textAlign: "center",
+    margin: "4px auto 18px",
   };
 
-  const buttonStyle = (active: boolean): React.CSSProperties => ({
+  const buttonStyle = (active: boolean): CSSProperties => ({
     padding: "7px 12px",
     borderRadius: 8,
     border: active ? "2px solid #22c55e" : "1px solid #64748b",
@@ -478,45 +488,13 @@ export default function App() {
     color: "white",
     cursor: "pointer",
     fontSize: 14,
-    marginRight: 8,
-    marginTop: 8,
+    margin: "4px 6px 0",
   });
 
-  const dividerStyle: React.CSSProperties = {
-    height: 5,
-    background: "white",
-    width: "min(430px, 100%)",
-    margin: "26px auto 24px",
-    borderRadius: 3,
-  };
-
-  const simControlStyle: React.CSSProperties = {
-    textAlign: "center",
-    margin: "0 auto 0",
-  };
-
-  const timeScaleLabelStyle: React.CSSProperties = {
-    fontSize: 17,
-    fontWeight: 800,
-    textAlign: "center",
-    marginBottom: 8,
-  };
-
-  const simButtonStyle: React.CSSProperties = {
-    padding: "7px 13px",
-    borderRadius: 7,
-    border: "1px solid #64748b",
-    background: "#1f2937",
-    color: "white",
-    cursor: "pointer",
-    fontSize: 13,
-    margin: "4px 5px 0",
-  };
-
-  const graphicWrapStyle: React.CSSProperties = {
+  const graphicWrapStyle: CSSProperties = {
     width: "100%",
-    maxWidth: "760px",
-    height: "520px",
+    maxWidth: "900px",
+    height: "560px",
     margin: "0 auto",
     background: "#101827",
     boxShadow: "8px 8px 18px rgba(0,0,0,0.35)",
@@ -525,15 +503,58 @@ export default function App() {
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
+    position: "relative",
   };
 
-  const paramBlockStyle: React.CSSProperties = {
-    width: "min(430px, 100%)",
-    margin: "22px auto 0",
+  const overlayControlsStyle: CSSProperties = {
+    position: "absolute",
+    left: "50%",
+    bottom: 10,
+    transform: "translateX(-50%)",
+    width: "min(420px, 88%)",
+    padding: "4px 10px",
+    background: "transparent",
+    textAlign: "center",
+    zIndex: 10,
+    pointerEvents: "auto",
+  };
+
+  const timeScaleLabelStyle: CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    textAlign: "center",
+    marginBottom: 2,
+    color: "rgba(255,255,255,0.72)",
+    textShadow: "0 1px 4px black",
+    background: "transparent",
+  };
+
+  const smallSliderStyle: CSSProperties = {
+    width: "100%",
+    margin: "2px auto 4px",
+    display: "block",
+    background: "transparent",
+  };
+
+  const simButtonStyle: CSSProperties = {
+    padding: "5px 11px",
+    borderRadius: 7,
+    border: "1px solid rgba(255,255,255,0.65)",
+    background: "rgba(31,41,55,0.55)",
+    color: "white",
+    cursor: "pointer",
+    fontSize: 12,
+    margin: "2px 5px 0",
+    backdropFilter: "blur(2px)",
+  };
+
+  const paramBlockStyle: CSSProperties = {
+    width: "min(500px, 100%)",
+    margin: "24px auto 0",
     textAlign: "left",
   };
 
-  const sectionHeaderStyle: React.CSSProperties = {
+  const sectionHeaderStyle: CSSProperties = {
     fontSize: 24,
     textDecoration: "underline",
     margin: "18px 0 8px 0",
@@ -541,18 +562,45 @@ export default function App() {
     textAlign: "left",
   };
 
-  const tableStyle: React.CSSProperties = {
-    margin: "18px auto 0",
-    borderCollapse: "collapse",
-    width: "min(460px, 100%)",
+  const textStyle: CSSProperties = {
     fontSize: 22,
-  };
-
-  const cellStyle: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.75)",
-    padding: "6px 10px",
+    lineHeight: 1.6,
     textAlign: "left",
   };
+
+  const graphicInfoStyle: CSSProperties = {
+    fill: "white",
+    fontSize: 12,
+    fontWeight: 700,
+  };
+
+  const compactHeaderStyle: CSSProperties = {
+    fill: "white",
+    fontSize: 10,
+    fontWeight: 700,
+  };
+
+  const compactCellStyle: CSSProperties = {
+    fill: "white",
+    fontSize: 10,
+    fontWeight: 500,
+  };
+
+  const compactStroke = "rgba(255,255,255,0.55)";
+
+  // Compact table geometry
+  const compactRowHeight = 14;
+  const compactHeaderHeight = 20;
+  const compactTableWidth = 148;
+  const compactTableHeight =
+    compactHeaderHeight + compactTableRanges.length * compactRowHeight;
+
+  const compactCol1X = 5;
+  const compactCol2X = 59;
+  const compactCol3X = 96;
+
+  const compactDivider1X = 54;
+  const compactDivider2X = 91;
 
   // =========================
   // RENDER
@@ -563,83 +611,64 @@ export default function App() {
       <h1 style={titleStyle}>Rendezvous Visualizer</h1>
 
       <main style={centerColumnStyle}>
-        {/* TOP EDITABLE PARAMETERS */}
-        <div style={editableTopStyle}>
-          <div style={textStyle}>
-            Rendezvous Altitude: {leadAltitude.toLocaleString()} ft
+        {/* TOP SLIDER ROW */}
+        <div style={sliderRowStyle}>
+          <div style={sliderItemStyle}>
+            <div style={sliderLabelStyle}>
+              Altitude: {leadAltitude.toLocaleString()} ft
+            </div>
+            <input
+              style={sliderStyle}
+              type="range"
+              min="0"
+              max="40000"
+              step="500"
+              value={leadAltitude}
+              onChange={(e) => setLeadAltitude(Number(e.target.value))}
+            />
           </div>
-          <input
-            style={sliderStyle}
-            type="range"
-            min="0"
-            max="40000"
-            step="500"
-            value={leadAltitude}
-            onChange={(e) => setLeadAltitude(Number(e.target.value))}
-          />
 
-          <div style={textStyle}>Wingman Airspeed (KIAS): {wingKIAS}</div>
-          <input
-            style={sliderStyle}
-            type="range"
-            min="180"
-            max="320"
-            value={wingKIAS}
-            onChange={(e) => setWingKIAS(Number(e.target.value))}
-          />
-
-          <div style={textStyle}>
-            Initial Range on Bearing: {spawnNm.toFixed(2)} nm
+          <div style={sliderItemStyle}>
+            <div style={sliderLabelStyle}>Wing KIAS: {wingKIAS}</div>
+            <input
+              style={sliderStyle}
+              type="range"
+              min="180"
+              max="320"
+              value={wingKIAS}
+              onChange={(e) => setWingKIAS(Number(e.target.value))}
+            />
           </div>
-          <input
-            style={sliderStyle}
-            type="range"
-            min="0.25"
-            max="5"
-            step="0.25"
-            value={spawnNm}
-            onChange={(e) => setSpawnNm(Number(e.target.value))}
-          />
 
-          <div style={textStyle}>Bearing Line</div>
+          <div style={sliderItemStyle}>
+            <div style={sliderLabelStyle}>
+              Start Range: {spawnNm.toFixed(2)} nm
+            </div>
+            <input
+              style={sliderStyle}
+              type="range"
+              min="0.25"
+              max="5"
+              step="0.25"
+              value={spawnNm}
+              onChange={(e) => setSpawnNm(Number(e.target.value))}
+            />
+          </div>
+        </div>
+
+        {/* BEARING TOGGLE */}
+        <div style={bearingRowStyle}>
           <button
             onClick={() => setBearingMode("F-18")}
             style={buttonStyle(bearingMode === "F-18")}
           >
-            45° F-18
+            45° Bearing Line (F-18)
           </button>
           <button
             onClick={() => setBearingMode("T-45")}
             style={buttonStyle(bearingMode === "T-45")}
           >
-            30° T-45
-          </button>
-        </div>
-
-        <div style={dividerStyle} />
-
-        {/* TIME CONTROLS */}
-        <div style={simControlStyle}>
-          <div style={timeScaleLabelStyle}>
-            Time Scale: {timeScale.toFixed(1)}x
-          </div>
-
-          <input
-            style={smallSliderStyle}
-            type="range"
-            min="0.1"
-            max="10"
-            step="0.1"
-            value={timeScale}
-            onChange={(e) => setTimeScale(Number(e.target.value))}
-          />
-
-          <button onClick={resetJoin} style={simButtonStyle}>
-            Reset Join
-          </button>
-
-          <button onClick={() => setPaused((p) => !p)} style={simButtonStyle}>
-            {paused ? "Resume" : "Pause"}
+            30° Bearing Line (T-45)
           </button>
         </div>
 
@@ -648,7 +677,7 @@ export default function App() {
           <svg
             width="100%"
             height="100%"
-            viewBox="0 0 660 520"
+            viewBox="0 0 660 560"
             preserveAspectRatio="xMidYMid meet"
             style={{
               display: "block",
@@ -657,6 +686,87 @@ export default function App() {
               background: "#101827",
             }}
           >
+            {/* Top-left in-graphic timing text */}
+            <text x={14} y={24} style={graphicInfoStyle}>
+              Time to Join:{" "}
+              {estimatedJoinSeconds === null
+                ? "Stabilizes"
+                : `${estimatedJoinSeconds.toFixed(0)} sec`}
+            </text>
+            <text x={14} y={42} style={graphicInfoStyle}>
+              Time for 360° Turn: {orbitPeriodSeconds.toFixed(0)} sec
+            </text>
+
+            {/* Compact in-graphic table */}
+            <g transform="translate(14, 58)">
+              <rect
+                x={0}
+                y={0}
+                width={compactTableWidth}
+                height={compactTableHeight}
+                fill="rgba(17,24,39,0.75)"
+                stroke={compactStroke}
+                strokeWidth={1}
+              />
+
+              {/* vertical column dividers */}
+              <line
+                x1={compactDivider1X}
+                y1={0}
+                x2={compactDivider1X}
+                y2={compactTableHeight}
+                stroke={compactStroke}
+                strokeWidth={1}
+              />
+              <line
+                x1={compactDivider2X}
+                y1={0}
+                x2={compactDivider2X}
+                y2={compactTableHeight}
+                stroke={compactStroke}
+                strokeWidth={1}
+              />
+
+              {/* header divider */}
+              <line
+                x1={0}
+                y1={compactHeaderHeight}
+                x2={compactTableWidth}
+                y2={compactHeaderHeight}
+                stroke={compactStroke}
+                strokeWidth={1}
+              />
+
+              <text x={compactCol1X} y={14} style={compactHeaderStyle}>
+                Range
+              </text>
+              <text x={compactCol2X} y={14} style={compactHeaderStyle}>
+                ATA
+              </text>
+              <text x={compactCol3X} y={14} style={compactHeaderStyle}>
+                Vc
+              </text>
+
+              {compactTableRanges.map((r, i) => {
+                const geo = solveGeometry(r);
+                const y = compactHeaderHeight + 11 + i * compactRowHeight;
+
+                return (
+                  <g key={r}>
+                    <text x={compactCol1X} y={y} style={compactCellStyle}>
+                      {r.toFixed(2)} nm
+                    </text>
+                    <text x={compactCol2X} y={y} style={compactCellStyle}>
+                      {geo.antennaTrainAngle.toFixed(1)}°
+                    </text>
+                    <text x={compactCol3X} y={y} style={compactCellStyle}>
+                      {geo.closureKt.toFixed(0)} kts
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+
             {/* Orbit */}
             <circle
               cx={centerX}
@@ -810,6 +920,29 @@ export default function App() {
               />
             </g>
           </svg>
+
+          {/* Transparent playback controls inside graphic */}
+          <div style={overlayControlsStyle}>
+            <div style={timeScaleLabelStyle}>{timeScale.toFixed(1)}x</div>
+
+            <input
+              style={smallSliderStyle}
+              type="range"
+              min="0.1"
+              max="10"
+              step="0.1"
+              value={timeScale}
+              onChange={(e) => setTimeScale(Number(e.target.value))}
+            />
+
+            <button onClick={resetJoin} style={simButtonStyle}>
+              Restart
+            </button>
+
+            <button onClick={() => setPaused((p) => !p)} style={simButtonStyle}>
+              {paused ? "Resume" : "Pause"}
+            </button>
+          </div>
         </div>
 
         {/* FIXED PARAMETERS */}
@@ -824,47 +957,11 @@ export default function App() {
           <div style={sectionHeaderStyle}>Dynamic Parameters</div>
           <div style={textStyle}>Turn Radius: {turnRadiusNm.toFixed(2)} nm</div>
           <div style={textStyle}>
-            Time for 360° Turn: {orbitPeriodSeconds.toFixed(0)} sec
-          </div>
-          <div style={textStyle}>
-            Time to Join:{" "}
-            {estimatedJoinSeconds === null
-              ? "Stabilizes"
-              : `${estimatedJoinSeconds.toFixed(0)} sec`}
-          </div>
-          <div style={textStyle}>
             True Airspeed Advantage: {trueAirspeedAdvantage.toFixed(1)} kt
           </div>
           <div style={textStyle}>Lead Airspeed (KTAS): {Math.round(leadKTAS)}</div>
           <div style={textStyle}>Wing Airspeed (KTAS): {Math.round(wingKTAS)}</div>
         </div>
-
-        {/* TABLE */}
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={cellStyle}>Range</th>
-              <th style={cellStyle}>ATA</th>
-              <th style={cellStyle}>Vc / Closure</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {tableRanges.map((r) => {
-              const geo = solveGeometry(r);
-
-              return (
-                <tr key={r}>
-                  <td style={cellStyle}>{r.toFixed(2)} nm</td>
-                  <td style={cellStyle}>
-                    {geo.antennaTrainAngle.toFixed(1)}°
-                  </td>
-                  <td style={cellStyle}>{geo.closureKt.toFixed(1)} kt</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </main>
     </div>
   );
