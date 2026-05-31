@@ -418,6 +418,10 @@ export default function App() {
   const vcLabelX = rangeLabelX;
   const vcLabelY = rangeLabelY + 18;
 
+  // Fixed playback controls close under the circle instead of at the bottom
+  // of the whole graphic box.
+  const controlsY = clamp(centerY + orbitRadiusPx + 8, 426, 493);
+
   // =========================
   // STYLES
   // =========================
@@ -496,16 +500,14 @@ export default function App() {
     position: "relative",
   };
 
-  const overlayControlsStyle: CSSProperties = {
-    position: "absolute",
-    left: "50%",
-    bottom: 10,
-    transform: "translateX(-50%)",
-    width: "min(420px, 88%)",
-    padding: "4px 10px",
+  const playbackContainerStyle: CSSProperties = {
+    width: "100%",
+    height: "100%",
     background: "transparent",
-    textAlign: "center",
-    zIndex: 10,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
     pointerEvents: "auto",
   };
 
@@ -622,6 +624,10 @@ export default function App() {
             height: 560px;
           }
 
+          .rv-playback-foreign {
+            overflow: visible;
+          }
+
           @media (max-width: 640px) {
             .rv-bearing-row {
               margin: 0 auto 4px;
@@ -631,7 +637,7 @@ export default function App() {
               display: grid;
               grid-template-columns: 1fr;
               gap: 6px;
-              margin: 0 auto 8px;
+              margin: 0 auto 6px;
               width: min(360px, 100%);
             }
 
@@ -958,30 +964,43 @@ export default function App() {
                 transform={`rotate(${wingHeading + SPRITE_OFFSET})`}
               />
             </g>
+
+            {/* Transparent playback controls fixed just under the circle */}
+            <foreignObject
+              x={160}
+              y={controlsY}
+              width={340}
+              height={58}
+              className="rv-playback-foreign"
+            >
+              <div style={playbackContainerStyle}>
+                <div style={timeScaleLabelStyle}>{timeScale.toFixed(1)}x</div>
+
+                <input
+                  style={smallSliderStyle}
+                  type="range"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  value={timeScale}
+                  onChange={(e) => setTimeScale(Number(e.target.value))}
+                />
+
+                <div>
+                  <button onClick={resetJoin} style={simButtonStyle}>
+                    Restart
+                  </button>
+
+                  <button
+                    onClick={() => setPaused((p) => !p)}
+                    style={simButtonStyle}
+                  >
+                    {paused ? "Resume" : "Pause"}
+                  </button>
+                </div>
+              </div>
+            </foreignObject>
           </svg>
-
-          {/* Transparent playback controls inside graphic */}
-          <div style={overlayControlsStyle}>
-            <div style={timeScaleLabelStyle}>{timeScale.toFixed(1)}x</div>
-
-            <input
-              style={smallSliderStyle}
-              type="range"
-              min="0.1"
-              max="10"
-              step="0.1"
-              value={timeScale}
-              onChange={(e) => setTimeScale(Number(e.target.value))}
-            />
-
-            <button onClick={resetJoin} style={simButtonStyle}>
-              Restart
-            </button>
-
-            <button onClick={() => setPaused((p) => !p)} style={simButtonStyle}>
-              {paused ? "Resume" : "Pause"}
-            </button>
-          </div>
         </div>
 
         {/* FIXED PARAMETERS */}
