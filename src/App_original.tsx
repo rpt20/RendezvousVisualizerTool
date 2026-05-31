@@ -59,15 +59,6 @@ export default function App() {
     return radiusFt / 6076.12;
   }
 
-  function bankFromTurnRate(turnRateDegPerSecondInput: number, ktas: number) {
-    const turnRateRadPerSecondInput = deg(turnRateDegPerSecondInput);
-    const speedFps = ktas * 1.68781;
-
-    return radToDeg(
-      Math.atan((speedFps * turnRateRadPerSecondInput) / g)
-    );
-  }
-
   // =========================
   // AIRSPEED / TURN PHYSICS
   // =========================
@@ -143,71 +134,6 @@ export default function App() {
   // =========================
 
   function solveGeometry(range: number) {
-    function solveCore(inputRange: number) {
-      const safeRange = Math.max(inputRange, 0.0001);
-
-      const xRel = -safeRange * Math.sin(deg(bearingLineDeg));
-      const yRel = safeRange * Math.cos(deg(bearingLineDeg));
-
-      const wingPostX = xRel;
-      const wingPostY = yRel - turnRadiusNm;
-
-      const vradX = -wingPostY * turnRateRadPerHour;
-      const vradY = wingPostX * turnRateRadPerHour;
-      const vradKt = Math.hypot(vradX, vradY);
-
-      const toLeadX = -xRel / safeRange;
-      const toLeadY = -yRel / safeRange;
-
-      // |VRAD + C * toLead| = wingKTAS
-      const dot = vradX * toLeadX + vradY * toLeadY;
-
-      const discriminant =
-        dot * dot - (vradKt * vradKt - wingKTAS * wingKTAS);
-
-      let closureKt = 0;
-      let canClose = true;
-
-      if (inputRange <= 0.0001) {
-        closureKt = 0;
-        canClose = true;
-      } else if (discriminant < 0) {
-        closureKt = 0;
-        canClose = false;
-      } else {
-        const root = Math.sqrt(discriminant);
-
-        const c1 = -dot + root;
-        const c2 = -dot - root;
-
-        const positive = [c1, c2].filter((c) => c > 0);
-
-        if (positive.length === 0) {
-          closureKt = 0;
-          canClose = false;
-        } else {
-          closureKt = Math.min(...positive);
-        }
-      }
-
-      const wingVelX = vradX + closureKt * toLeadX;
-      const wingVelY = vradY + closureKt * toLeadY;
-
-      const wingHeadingMath = headingFromVector(wingVelX, wingVelY);
-      const misalignment = normalizeAngle(wingHeadingMath);
-
-      return {
-        safeRange,
-        xRel,
-        yRel,
-        vradKt,
-        closureKt,
-        canClose,
-        wingHeadingMath,
-        misalignment,
-      };
-    }
-
     const safeRange = Math.max(range, 0.0001);
 
     const rangePx = safeRange * pixelsPerNm;
@@ -216,9 +142,60 @@ export default function App() {
     const wingX = leadX + Math.cos(bearingRad) * rangePx;
     const wingY = leadY + Math.sin(bearingRad) * rangePx;
 
-    const core = solveCore(range);
+    // Lead-relative math frame:
+    // +X = lead heading
+    // +Y = lead's left wing
+    const xRel = -safeRange * Math.sin(deg(bearingLineDeg));
+    const yRel = safeRange * Math.cos(deg(bearingLineDeg));
 
-    const wingHeadingScreen = leadHeading - core.misalignment;
+    const wingPostX = xRel;
+    const wingPostY = yRel - turnRadiusNm;
+
+    const vradX = -wingPostY * turnRateRadPerHour;
+    const vradY = wingPostX * turnRateRadPerHour;
+    const vradKt = Math.hypot(vradX, vradY);
+
+    const toLeadX = -xRel / safeRange;
+    const toLeadY = -yRel / safeRange;
+
+    // |VRAD + C * toLead| = wingKTAS
+    const dot = vradX * toLeadX + vradY * toLeadY;
+
+    const discriminant =
+      dot * dot - (vradKt * vradKt - wingKTAS * wingKTAS);
+
+    let closureKt = 0;
+    let canClose = true;
+
+    if (range <= 0.0001) {
+      closureKt = 0;
+      canClose = true;
+    } else if (discriminant < 0) {
+      closureKt = 0;
+      canClose = false;
+    } else {
+      const root = Math.sqrt(discriminant);
+
+      const c1 = -dot + root;
+      const c2 = -dot - root;
+
+      const positive = [c1, c2].filter((c) => c > 0);
+
+      if (positive.length === 0) {
+        closureKt = 0;
+        canClose = false;
+      } else {
+        closureKt = Math.min(...positive);
+      }
+    }
+
+    const wingVelX = vradX + closureKt * toLeadX;
+    const wingVelY = vradY + closureKt * toLeadY;
+
+    const wingHeadingMath = headingFromVector(wingVelX, wingVelY);
+    const misalignment = normalizeAngle(wingHeadingMath);
+
+    const wingHeadingScreen = leadHeading - misalignment;
 
     // Signed ATA:
     // Negative = nose to the right side of bearing / LOS line.
@@ -227,53 +204,15 @@ export default function App() {
       lineOfSightHeading - wingHeadingScreen
     );
 
-    // Wing AOB estimate:
-    // While driving up the bearing line, estimate the instantaneous heading
-    // rate required by comparing this geometry to a small forward step.
-    //
-    // At the end of the join the wing is colocated with lead and should match
-    // lead's turn, so AOB should be the lead AOB, not zero.
-    const bankDt = 0.25;
-    let wingBankDeg = bankAngle;
-
-    if (range > JOIN_THRESHOLD_NM && core.canClose && core.closureKt > 0) {
-      const nextRange = Math.max(
-        JOIN_THRESHOLD_NM,
-        range - (core.closureKt / 3600) * bankDt
-      );
-
-      const nextCore = solveCore(nextRange);
-
-      const currentScreenHeading = leadHeading - core.misalignment;
-      const nextLeadHeading = leadHeading - turnRateDegPerSecond * bankDt;
-      const nextScreenHeading = nextLeadHeading - nextCore.misalignment;
-
-      const headingChangeDeg = normalizeAngle(
-        nextScreenHeading - currentScreenHeading
-      );
-
-      const rawBank = bankFromTurnRate(
-        Math.abs(headingChangeDeg / bankDt),
-        wingKTAS
-      );
-
-      wingBankDeg = clamp(rawBank, 0, 80);
-    }
-
-    if (range <= JOIN_THRESHOLD_NM) {
-      wingBankDeg = bankAngle;
-    }
-
     return {
       wingX,
       wingY,
-      vradKt: core.vradKt,
-      closureKt: core.closureKt,
-      canClose: core.canClose,
+      vradKt,
+      closureKt,
+      canClose,
       wingHeadingScreen,
-      misalignment: core.misalignment,
+      misalignment,
       antennaTrainAngle,
-      wingBankDeg,
     };
   }
 
@@ -512,9 +451,6 @@ export default function App() {
   const vcLabelX = rangeLabelX;
   const vcLabelY = rangeLabelY + 18;
 
-  const bankLabelX = rangeLabelX;
-  const bankLabelY = rangeLabelY + 36;
-
   // =========================
   // STYLES
   // =========================
@@ -671,18 +607,16 @@ export default function App() {
   // Compact table geometry
   const compactRowHeight = 14;
   const compactHeaderHeight = 20;
-  const compactTableWidth = 192;
+  const compactTableWidth = 148;
   const compactTableHeight =
     compactHeaderHeight + compactTableRanges.length * compactRowHeight;
 
   const compactCol1X = 5;
   const compactCol2X = 59;
   const compactCol3X = 96;
-  const compactCol4X = 145;
 
   const compactDivider1X = 54;
   const compactDivider2X = 91;
-  const compactDivider3X = 140;
 
   // =========================
   // RENDER
@@ -857,14 +791,6 @@ export default function App() {
                 stroke={compactStroke}
                 strokeWidth={1}
               />
-              <line
-                x1={compactDivider3X}
-                y1={0}
-                x2={compactDivider3X}
-                y2={compactTableHeight}
-                stroke={compactStroke}
-                strokeWidth={1}
-              />
 
               {/* header divider */}
               <line
@@ -885,9 +811,6 @@ export default function App() {
               <text x={compactCol3X} y={14} style={compactHeaderStyle}>
                 Vc
               </text>
-              <text x={compactCol4X} y={14} style={compactHeaderStyle}>
-                AOB
-              </text>
 
               {compactTableRanges.map((r, i) => {
                 const geo = solveGeometry(r);
@@ -903,9 +826,6 @@ export default function App() {
                     </text>
                     <text x={compactCol3X} y={y} style={compactCellStyle}>
                       {geo.closureKt.toFixed(0)} kts
-                    </text>
-                    <text x={compactCol4X} y={y} style={compactCellStyle}>
-                      {geo.wingBankDeg.toFixed(0)}°
                     </text>
                   </g>
                 );
@@ -1039,16 +959,6 @@ export default function App() {
               fontWeight="bold"
             >
               Vc: {currentGeo.closureKt.toFixed(1)} kt
-            </text>
-
-            <text
-              x={bankLabelX}
-              y={bankLabelY}
-              fill="yellow"
-              fontSize="12"
-              fontWeight="bold"
-            >
-              AOB: {currentGeo.wingBankDeg.toFixed(0)}°
             </text>
 
             {/* Lead aircraft */}
