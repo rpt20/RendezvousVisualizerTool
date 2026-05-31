@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import superHornet from "./assets/super-hornet.png";
 
 type BearingMode = "F-18" | "T-45";
 
 export default function App() {
   const centerX = 330;
-  const centerY = 290;
+  const centerY = 285;
 
   const SPRITE_OFFSET = 90;
-  const BASE_PIXELS_PER_NM = 100;
-
   const leadKIAS = 250;
   const bankAngle = 30;
   const g = 32.174;
@@ -36,23 +35,38 @@ export default function App() {
     return x;
   }
 
+  function clamp(value: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, value));
+  }
+
   function headingFromVector(x: number, y: number) {
     return radToDeg(Math.atan2(y, x));
+  }
+
+  function kiasToKtas(kias: number, altitudeFt: number) {
+    return kias * (1 + (altitudeFt / 1000) * 0.02);
+  }
+
+  function turnRadiusNmFromKtas(ktas: number) {
+    const speedFps = ktas * 1.68781;
+
+    const radiusFt =
+      (speedFps * speedFps) /
+      (g * Math.tan(deg(bankAngle)));
+
+    return radiusFt / 6076.12;
   }
 
   // =========================
   // AIRSPEED / TURN PHYSICS
   // =========================
 
-  const leadKTAS = leadKIAS * (1 + (leadAltitude / 1000) * 0.02);
-  const wingKTAS = wingKIAS * (1 + (leadAltitude / 1000) * 0.02);
+  const leadKTAS = kiasToKtas(leadKIAS, leadAltitude);
+  const wingKTAS = kiasToKtas(wingKIAS, leadAltitude);
 
-  const leadSpeedFps = leadKTAS * 1.68781;
+  const trueAirspeedAdvantage = wingKTAS - leadKTAS;
 
-  const turnRadiusFt =
-    (leadSpeedFps * leadSpeedFps) / (g * Math.tan(deg(bankAngle)));
-
-  const turnRadiusNm = turnRadiusFt / 6076.12;
+  const turnRadiusNm = turnRadiusNmFromKtas(leadKTAS);
 
   const turnRateRadPerHour = leadKTAS / turnRadiusNm;
   const turnRateRadPerSecond = turnRateRadPerHour / 3600;
@@ -60,13 +74,29 @@ export default function App() {
 
   const orbitPeriodSeconds = 360 / turnRateDegPerSecond;
 
-  // Circle continues to shrink / expand as altitude changes.
-  const pixelsPerNm = Math.min(
-    BASE_PIXELS_PER_NM,
-    180 / Math.max(turnRadiusNm, 1)
+  // Smooth display scaling from 0 ft to 40,000 ft.
+  // The real turn radius still drives the math, but the displayed circle
+  // smoothly grows as altitude increases instead of snapping/clamping.
+  const minDisplayRadiusPx = 120;
+  const maxDisplayRadiusPx = 210;
+
+  const radiusAt0FtNm = turnRadiusNmFromKtas(kiasToKtas(leadKIAS, 0));
+  const radiusAt40000FtNm = turnRadiusNmFromKtas(
+    kiasToKtas(leadKIAS, 40000)
   );
 
-  const orbitRadiusPx = turnRadiusNm * pixelsPerNm;
+  const radiusDisplayRatio = clamp(
+    (turnRadiusNm - radiusAt0FtNm) /
+      (radiusAt40000FtNm - radiusAt0FtNm),
+    0,
+    1
+  );
+
+  const orbitRadiusPx =
+    minDisplayRadiusPx +
+    (maxDisplayRadiusPx - minDisplayRadiusPx) * radiusDisplayRatio;
+
+  const pixelsPerNm = orbitRadiusPx / turnRadiusNm;
 
   // =========================
   // LEAD POSITION / HEADING
@@ -110,9 +140,6 @@ export default function App() {
     const wingPostX = xRel;
     const wingPostY = yRel - turnRadiusNm;
 
-    // VRAD:
-    // velocity required to remain fixed on the rotating bearing line
-    // with zero closure.
     const vradX = -wingPostY * turnRateRadPerHour;
     const vradY = wingPostX * turnRateRadPerHour;
     const vradKt = Math.hypot(vradX, vradY);
@@ -229,7 +256,10 @@ export default function App() {
           return r;
         }
 
-        return Math.max(0, r - (geo.closureKt / 3600) * dt * timeScale);
+        return Math.max(
+          0,
+          r - (geo.closureKt / 3600) * dt * timeScale
+        );
       });
     }, 30);
 
@@ -280,7 +310,7 @@ export default function App() {
   const wingY = currentGeo.wingY;
   const wingHeading = currentGeo.wingHeadingScreen;
 
-  //const joined = rangeNm <= 0.01;
+  const joined = rangeNm <= 0.01;
 
   // =========================
   // SVG GEOMETRY
@@ -371,7 +401,6 @@ export default function App() {
   const ataDegreesLabelY =
     wingNoseY + Math.sin(deg(ataLabelOffsetHeading)) * 12;
 
-  // RNG label behind the wingman's right stabilator.
   const rngAftOffset = 58;
   const rngRightOffset = 30;
 
@@ -397,95 +426,98 @@ export default function App() {
     background: "#111827",
     color: "white",
     fontFamily: "Arial, sans-serif",
-    padding: "18px 28px",
+    padding: "18px 18px 42px",
     boxSizing: "border-box",
+    overflowX: "hidden",
   };
 
   const titleStyle: React.CSSProperties = {
     textAlign: "center",
-    fontSize: 42,
-    fontWeight: 400,
-    margin: "0 0 12px 0",
+    fontSize: 46,
+    fontWeight: 800,
+    color: "white",
+    margin: "0 0 22px 0",
+    lineHeight: 1,
+    whiteSpace: "nowrap",
   };
 
-  const topGridStyle: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 90,
-    maxWidth: 1040,
-    margin: "0 auto 20px auto",
+  const centerColumnStyle: React.CSSProperties = {
+    width: "min(760px, 100%)",
+    margin: "0 auto",
   };
 
-  const panelTitleStyle: React.CSSProperties = {
-    fontSize: 26,
-    fontWeight: 700,
-    textDecoration: "underline",
-    textAlign: "center",
-    marginBottom: 28,
-  };
-
-  const sectionHeaderStyle: React.CSSProperties = {
-    fontSize: 23,
-    textDecoration: "underline",
-    margin: "18px 0 4px 0",
+  const editableTopStyle: React.CSSProperties = {
+    width: "min(430px, 100%)",
+    margin: "0 auto 18px auto",
+    textAlign: "left",
   };
 
   const textStyle: React.CSSProperties = {
-    fontSize: 22,
-    lineHeight: 1.35,
+    fontSize: 23,
+    lineHeight: 1.45,
+    textAlign: "left",
   };
 
   const sliderStyle: React.CSSProperties = {
     width: "100%",
-    maxWidth: 330,
-    margin: "4px 0 10px 0",
+    maxWidth: 390,
+    margin: "6px 0 14px",
+    display: "block",
+  };
+
+  const smallSliderStyle: React.CSSProperties = {
+    width: "min(390px, 100%)",
+    margin: "14px auto 16px",
+    display: "block",
   };
 
   const buttonStyle = (active: boolean): React.CSSProperties => ({
-    padding: "9px 14px",
+    padding: "7px 12px",
     borderRadius: 8,
     border: active ? "2px solid #22c55e" : "1px solid #64748b",
     background: active ? "#163a23" : "#1f2937",
     color: "white",
     cursor: "pointer",
-    fontSize: 15,
+    fontSize: 14,
     marginRight: 8,
-    marginTop: 6,
+    marginTop: 8,
   });
 
+  const dividerStyle: React.CSSProperties = {
+    height: 5,
+    background: "white",
+    width: "min(430px, 100%)",
+    margin: "26px auto 24px",
+    borderRadius: 3,
+  };
+
   const simControlStyle: React.CSSProperties = {
-    maxWidth: 660,
-    margin: "8px auto 10px auto",
     textAlign: "center",
+    margin: "0 auto 0",
+  };
+
+  const timeScaleLabelStyle: React.CSSProperties = {
+    fontSize: 17,
+    fontWeight: 800,
+    textAlign: "center",
+    marginBottom: 8,
   };
 
   const simButtonStyle: React.CSSProperties = {
-    padding: "8px 14px",
-    borderRadius: 8,
+    padding: "7px 13px",
+    borderRadius: 7,
     border: "1px solid #64748b",
     background: "#1f2937",
     color: "white",
     cursor: "pointer",
-    fontSize: 15,
-    margin: "8px 6px 0 6px",
-  };
-
-  const tableStyle: React.CSSProperties = {
-    margin: "20px auto 24px auto",
-    borderCollapse: "collapse",
-    minWidth: 540,
-    fontSize: 22,
-  };
-
-  const cellStyle: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.75)",
-    padding: "7px 12px",
-    textAlign: "left",
+    fontSize: 13,
+    margin: "4px 5px 0",
   };
 
   const graphicWrapStyle: React.CSSProperties = {
-    width: 660,
-    height: 500,
+    width: "100%",
+    maxWidth: "760px",
+    height: "520px",
     margin: "0 auto",
     background: "#101827",
     boxShadow: "8px 8px 18px rgba(0,0,0,0.35)",
@@ -493,6 +525,34 @@ export default function App() {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  };
+
+  const paramBlockStyle: React.CSSProperties = {
+    width: "min(430px, 100%)",
+    margin: "22px auto 0",
+    textAlign: "left",
+  };
+
+  const sectionHeaderStyle: React.CSSProperties = {
+    fontSize: 24,
+    textDecoration: "underline",
+    margin: "18px 0 8px 0",
+    lineHeight: 1.25,
+    textAlign: "left",
+  };
+
+  const tableStyle: React.CSSProperties = {
+    margin: "18px auto 0",
+    borderCollapse: "collapse",
+    width: "min(460px, 100%)",
+    fontSize: 22,
+  };
+
+  const cellStyle: React.CSSProperties = {
+    border: "1px solid rgba(255,255,255,0.75)",
+    padding: "6px 10px",
+    textAlign: "left",
   };
 
   // =========================
@@ -501,15 +561,14 @@ export default function App() {
 
   return (
     <div style={pageStyle}>
-      <h1 style={titleStyle}>Rendezvous Geometry Visualizer</h1>
+      <h1 style={titleStyle}>Rendezvous Visualizer</h1>
 
-      <div style={topGridStyle}>
-        {/* LEAD COLUMN */}
-        <div>
-          <div style={panelTitleStyle}>Lead Aircraft</div>
-
-          <div style={sectionHeaderStyle}>Editable Parameters</div>
-          <div style={textStyle}>Rendezvous Altitude:</div>
+      <main style={centerColumnStyle}>
+        {/* TOP EDITABLE PARAMETERS */}
+        <div style={editableTopStyle}>
+          <div style={textStyle}>
+            Rendezvous Altitude: {leadAltitude.toLocaleString()} ft
+          </div>
           <input
             style={sliderStyle}
             type="range"
@@ -519,27 +578,8 @@ export default function App() {
             value={leadAltitude}
             onChange={(e) => setLeadAltitude(Number(e.target.value))}
           />
-          <div style={textStyle}>{leadAltitude.toLocaleString()} ft</div>
 
-          <div style={sectionHeaderStyle}>Fixed Parameters</div>
-          <div style={textStyle}>Airspeed (KIAS): {leadKIAS}</div>
-          <div style={textStyle}>Angle of Bank: {bankAngle}°</div>
-
-          <div style={sectionHeaderStyle}>Dynamic Parameters</div>
-          <div style={textStyle}>Airspeed (KTAS): {Math.round(leadKTAS)}</div>
-          <div style={textStyle}>Turn Radius: {turnRadiusNm.toFixed(2)} nm</div>
-          <div style={textStyle}>
-            Time for 360° Turn: {orbitPeriodSeconds.toFixed(0)} sec
-          </div>
-        </div>
-
-        {/* WING COLUMN */}
-        <div>
-          <div style={panelTitleStyle}>Wing Aircraft</div>
-
-          <div style={sectionHeaderStyle}>Editable Parameters</div>
-
-          <div style={textStyle}>Airspeed (KIAS): {wingKIAS}</div>
+          <div style={textStyle}>Wingman Airspeed (KIAS): {wingKIAS}</div>
           <input
             style={sliderStyle}
             type="range"
@@ -562,48 +602,39 @@ export default function App() {
             onChange={(e) => setSpawnNm(Number(e.target.value))}
           />
 
-          <div style={textStyle}>Bearing Line:</div>
+          <div style={textStyle}>Bearing Line</div>
           <button
             onClick={() => setBearingMode("F-18")}
             style={buttonStyle(bearingMode === "F-18")}
           >
-            45° Bearing Line (F-18)
+            45° F-18
           </button>
           <button
             onClick={() => setBearingMode("T-45")}
             style={buttonStyle(bearingMode === "T-45")}
           >
-            30° Bearing Line (T-45)
+            30° T-45
           </button>
-
-          <div style={sectionHeaderStyle}>Dynamic Parameters</div>
-          <div style={textStyle}>
-            Time to Join:{" "}
-            {estimatedJoinSeconds === null
-              ? "Stabilizes"
-              : `${estimatedJoinSeconds.toFixed(0)} sec`}
-          </div>
-          <div style={textStyle}>
-            ΔIAS or Airspeed Advantage: {wingKIAS - leadKIAS} kt
-          </div>
-          <div style={textStyle}>Airspeed (KTAS): {Math.round(wingKTAS)}</div>
         </div>
-      </div>
 
-      {/* SIM CONTROLS CENTERED ABOVE GRAPHIC */}
-      <div style={simControlStyle}>
-        <div style={textStyle}>Time Scale: {timeScale.toFixed(1)}x</div>
-        <input
-          style={{ ...sliderStyle, maxWidth: 440 }}
-          type="range"
-          min="0.1"
-          max="10"
-          step="0.1"
-          value={timeScale}
-          onChange={(e) => setTimeScale(Number(e.target.value))}
-        />
+        <div style={dividerStyle} />
 
-        <div>
+        {/* TIME CONTROLS */}
+        <div style={simControlStyle}>
+          <div style={timeScaleLabelStyle}>
+            Time Scale: {timeScale.toFixed(1)}x
+          </div>
+
+          <input
+            style={smallSliderStyle}
+            type="range"
+            min="0.1"
+            max="10"
+            step="0.1"
+            value={timeScale}
+            onChange={(e) => setTimeScale(Number(e.target.value))}
+          />
+
           <button onClick={resetJoin} style={simButtonStyle}>
             Reset Join
           </button>
@@ -612,189 +643,230 @@ export default function App() {
             {paused ? "Resume" : "Pause"}
           </button>
         </div>
-      </div>
 
-      <div style={graphicWrapStyle}>
-        <svg width="660" height="500">
-          {/* Orbit */}
-          <circle
-            cx={centerX}
-            cy={centerY}
-            r={orbitRadiusPx}
-            fill="none"
-            stroke="#3b82f6"
-            strokeDasharray="8 6"
-            strokeWidth={lineWeight}
-          />
-
-          {/* Post */}
-          <circle cx={centerX} cy={centerY} r="5" fill="red" />
-
-          {/* Radius */}
-          <line
-            x1={centerX}
-            y1={centerY}
-            x2={leadX}
-            y2={leadY}
-            stroke="rgba(248, 113, 113, 0.35)"
-            strokeWidth={lineWeight}
-            strokeDasharray="6 6"
-          />
-
-          <text
-            x={radiusLabelX}
-            y={radiusLabelY}
-            fill="rgba(252, 165, 165, 0.75)"
-            fontSize="13"
-            fontWeight="bold"
+        {/* GRAPHIC */}
+        <div style={graphicWrapStyle}>
+          <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 660 520"
+            preserveAspectRatio="xMidYMid meet"
+            style={{
+              display: "block",
+              maxWidth: "100%",
+              height: "100%",
+              background: "#101827",
+            }}
           >
-            Radius {turnRadiusNm.toFixed(2)} nm
-          </text>
-
-          {/* Lead heading line */}
-          <line
-            x1={leadX}
-            y1={leadY}
-            x2={leadHeadingX}
-            y2={leadHeadingY}
-            stroke="#38bdf8"
-            strokeWidth={lineWeight}
-            strokeDasharray="5 5"
-          />
-
-          {/* Bearing line */}
-          <line
-            x1={bearingLineStartX}
-            y1={bearingLineStartY}
-            x2={bearingLineEndX}
-            y2={bearingLineEndY}
-            stroke="yellow"
-            strokeWidth={lineWeight}
-            strokeDasharray="8 8"
-          />
-
-          <text
-            x={bearingLabelX}
-            y={bearingLabelY}
-            fill="yellow"
-            fontSize="12"
-            fontWeight="bold"
-            textAnchor="middle"
-            transform={`rotate(${bearingHeading}, ${bearingLabelX}, ${bearingLabelY})`}
-          >
-            {bearingLineDeg}° Bearing Line
-          </text>
-
-          {/* Range line */}
-          <line
-            x1={wingX}
-            y1={wingY}
-            x2={leadX}
-            y2={leadY}
-            stroke="yellow"
-            strokeWidth={lineWeight}
-            strokeDasharray="6 4"
-          />
-
-          {/* Wingman nose / fuselage heading */}
-          <line
-            x1={wingX}
-            y1={wingY}
-            x2={wingNoseX}
-            y2={wingNoseY}
-            stroke="lime"
-            strokeWidth={lineWeight}
-            strokeDasharray="7 5"
-          />
-
-          {/* ATA arc */}
-          <path
-            d={ataArcPath}
-            fill="none"
-            stroke="lime"
-            strokeWidth={lineWeight}
-          />
-
-          <text
-            x={ataDegreesLabelX}
-            y={ataDegreesLabelY}
-            fill="lime"
-            fontSize="13"
-            fontWeight="bold"
-          >
-            ATA: {currentGeo.antennaTrainAngle.toFixed(1)}°
-          </text>
-
-          <text
-            x={rangeLabelX}
-            y={rangeLabelY}
-            fill="yellow"
-            fontSize="12"
-            fontWeight="bold"
-          >
-            RNG: {rangeNm.toFixed(2)} nm
-          </text>
-
-          <text
-            x={vcLabelX}
-            y={vcLabelY}
-            fill="yellow"
-            fontSize="12"
-            fontWeight="bold"
-          >
-            Vc: {currentGeo.closureKt.toFixed(1)} kt
-          </text>
-
-          {/* Lead aircraft */}
-          <g transform={`translate(${leadX},${leadY})`}>
-            <image
-              href="${import.meta.env.BASE_URL}/super hornet_transparent background.png"
-              x={-20}
-              y={-20}
-              width={40}
-              height={40}
-              transform={`rotate(${leadHeading + SPRITE_OFFSET})`}
+            {/* Orbit */}
+            <circle
+              cx={centerX}
+              cy={centerY}
+              r={orbitRadiusPx}
+              fill="none"
+              stroke="#3b82f6"
+              strokeDasharray="8 6"
+              strokeWidth={lineWeight}
             />
-          </g>
 
-          {/* Wingman aircraft */}
-          <g transform={`translate(${wingX},${wingY})`}>
-            <image
-              href="/super hornet_transparent background.png"
-              x={-20}
-              y={-20}
-              width={40}
-              height={40}
-              transform={`rotate(${wingHeading + SPRITE_OFFSET})`}
+            {/* Post */}
+            <circle cx={centerX} cy={centerY} r="5" fill="red" />
+
+            {/* Radius */}
+            <line
+              x1={centerX}
+              y1={centerY}
+              x2={leadX}
+              y2={leadY}
+              stroke="rgba(248, 113, 113, 0.35)"
+              strokeWidth={lineWeight}
+              strokeDasharray="6 6"
             />
-          </g>
-        </svg>
-      </div>
 
-      {/* TABLE BELOW GRAPHIC */}
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            <th style={cellStyle}>Range</th>
-            <th style={cellStyle}>ATA</th>
-            <th style={cellStyle}>Vc / Closure</th>
-          </tr>
-        </thead>
+            <text
+              x={radiusLabelX}
+              y={radiusLabelY}
+              fill="rgba(252, 165, 165, 0.75)"
+              fontSize="13"
+              fontWeight="bold"
+            >
+              Radius {turnRadiusNm.toFixed(2)} nm
+            </text>
 
-        <tbody>
-          {tableRanges.map((r) => {
-            const geo = solveGeometry(r);
+            {/* Lead heading line */}
+            <line
+              x1={leadX}
+              y1={leadY}
+              x2={leadHeadingX}
+              y2={leadHeadingY}
+              stroke="#38bdf8"
+              strokeWidth={lineWeight}
+              strokeDasharray="5 5"
+            />
 
-            return (
-              <tr key={r}>
-                <td style={cellStyle}>{r.toFixed(2)} nm</td>
-                <td style={cellStyle}>{geo.antennaTrainAngle.toFixed(1)}°</td>
-                <td style={cellStyle}>{geo.closureKt.toFixed(1)} kt</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            {/* Bearing line */}
+            <line
+              x1={bearingLineStartX}
+              y1={bearingLineStartY}
+              x2={bearingLineEndX}
+              y2={bearingLineEndY}
+              stroke="yellow"
+              strokeWidth={lineWeight}
+              strokeDasharray="8 8"
+            />
+
+            <text
+              x={bearingLabelX}
+              y={bearingLabelY}
+              fill="yellow"
+              fontSize="12"
+              fontWeight="bold"
+              textAnchor="middle"
+              transform={`rotate(${bearingHeading}, ${bearingLabelX}, ${bearingLabelY})`}
+            >
+              {bearingLineDeg}° Bearing Line
+            </text>
+
+            {/* Range line */}
+            <line
+              x1={wingX}
+              y1={wingY}
+              x2={leadX}
+              y2={leadY}
+              stroke="yellow"
+              strokeWidth={lineWeight}
+              strokeDasharray="6 4"
+            />
+
+            {/* Wingman nose / fuselage heading */}
+            <line
+              x1={wingX}
+              y1={wingY}
+              x2={wingNoseX}
+              y2={wingNoseY}
+              stroke="lime"
+              strokeWidth={lineWeight}
+              strokeDasharray="7 5"
+            />
+
+            {/* ATA arc */}
+            <path
+              d={ataArcPath}
+              fill="none"
+              stroke="lime"
+              strokeWidth={lineWeight}
+            />
+
+            <text
+              x={ataDegreesLabelX}
+              y={ataDegreesLabelY}
+              fill="lime"
+              fontSize="13"
+              fontWeight="bold"
+            >
+              ATA: {currentGeo.antennaTrainAngle.toFixed(1)}°
+            </text>
+
+            <text
+              x={rangeLabelX}
+              y={rangeLabelY}
+              fill="yellow"
+              fontSize="12"
+              fontWeight="bold"
+            >
+              RNG: {rangeNm.toFixed(2)} nm
+            </text>
+
+            <text
+              x={vcLabelX}
+              y={vcLabelY}
+              fill="yellow"
+              fontSize="12"
+              fontWeight="bold"
+            >
+              Vc: {currentGeo.closureKt.toFixed(1)} kt
+            </text>
+
+            {/* Lead aircraft */}
+            <g transform={`translate(${leadX},${leadY})`}>
+              <image
+                href={superHornet}
+                x={-20}
+                y={-20}
+                width={40}
+                height={40}
+                transform={`rotate(${leadHeading + SPRITE_OFFSET})`}
+              />
+            </g>
+
+            {/* Wingman aircraft */}
+            <g transform={`translate(${wingX},${wingY})`}>
+              <image
+                href={superHornet}
+                x={-20}
+                y={-20}
+                width={40}
+                height={40}
+                transform={`rotate(${wingHeading + SPRITE_OFFSET})`}
+              />
+            </g>
+          </svg>
+        </div>
+
+        {/* FIXED PARAMETERS */}
+        <div style={paramBlockStyle}>
+          <div style={sectionHeaderStyle}>Fixed Parameters</div>
+          <div style={textStyle}>Lead Airspeed (KIAS): {leadKIAS}</div>
+          <div style={textStyle}>Angle of Bank: {bankAngle}°</div>
+        </div>
+
+        {/* DYNAMIC PARAMETERS */}
+        <div style={paramBlockStyle}>
+          <div style={sectionHeaderStyle}>Dynamic Parameters</div>
+          <div style={textStyle}>Turn Radius: {turnRadiusNm.toFixed(2)} nm</div>
+          <div style={textStyle}>
+            Time for 360° Turn: {orbitPeriodSeconds.toFixed(0)} sec
+          </div>
+          <div style={textStyle}>
+            Time to Join:{" "}
+            {estimatedJoinSeconds === null
+              ? "Stabilizes"
+              : `${estimatedJoinSeconds.toFixed(0)} sec`}
+          </div>
+          <div style={textStyle}>
+            True Airspeed Advantage: {trueAirspeedAdvantage.toFixed(1)} kt
+          </div>
+          <div style={textStyle}>Lead Airspeed (KTAS): {Math.round(leadKTAS)}</div>
+          <div style={textStyle}>Wing Airspeed (KTAS): {Math.round(wingKTAS)}</div>
+        </div>
+
+        {/* TABLE */}
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={cellStyle}>Range</th>
+              <th style={cellStyle}>ATA</th>
+              <th style={cellStyle}>Vc / Closure</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {tableRanges.map((r) => {
+              const geo = solveGeometry(r);
+
+              return (
+                <tr key={r}>
+                  <td style={cellStyle}>{r.toFixed(2)} nm</td>
+                  <td style={cellStyle}>
+                    {geo.antennaTrainAngle.toFixed(1)}°
+                  </td>
+                  <td style={cellStyle}>{geo.closureKt.toFixed(1)} kt</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </main>
     </div>
   );
 }
