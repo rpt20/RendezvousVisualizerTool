@@ -827,7 +827,7 @@ export default function App() {
           <div style={textStyle}>
             Time for 360° Turn: {orbitPeriodSeconds.toFixed(0)} sec
           </div>
-          <div style={textStyle}>\\
+          <div style={textStyle}>
             Time to Join:{" "}
             {estimatedJoinSeconds === null
               ? "Stabilizes"
