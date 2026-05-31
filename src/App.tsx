@@ -618,21 +618,29 @@ export default function App() {
             min-width: 0;
           }
 
+          .rv-graphic-wrap {
+            height: 560px;
+          }
+
           @media (max-width: 640px) {
             .rv-bearing-row {
-              margin: 0 auto 6px;
+              margin: 0 auto 4px;
             }
 
             .rv-slider-row {
               display: grid;
               grid-template-columns: 1fr;
-              gap: 8px;
-              margin: 0 auto 6px;
+              gap: 6px;
+              margin: 0 auto 8px;
               width: min(360px, 100%);
             }
 
             .rv-slider-item {
               width: 100%;
+            }
+
+            .rv-graphic-wrap {
+              height: min(560px, calc((100vw - 20px) * 560 / 660));
             }
           }
         `}
@@ -704,12 +712,12 @@ export default function App() {
         </div>
 
         {/* GRAPHIC RIGHT NEXT TO SLIDERS */}
-        <div style={graphicWrapStyle}>
+        <div className="rv-graphic-wrap" style={graphicWrapStyle}>
           <svg
             width="100%"
             height="100%"
             viewBox="0 0 660 560"
-            preserveAspectRatio="xMidYMid meet"
+            preserveAspectRatio="xMidYMin meet"
             style={{
               display: "block",
               maxWidth: "100%",
