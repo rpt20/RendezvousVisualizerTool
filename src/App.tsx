@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import "./App.css";
 import superHornet from "./assets/super-hornet.png";
 
@@ -12,6 +12,7 @@ export default function App() {
   const leadKIAS = 250;
   const bankAngle = 30;
   const g = 32.174;
+  const JOIN_THRESHOLD_NM = 0.001;
 
   const [bearingMode, setBearingMode] = useState<BearingMode>("F-18");
   const [leadAltitude, setLeadAltitude] = useState(10000);
@@ -22,6 +23,8 @@ export default function App() {
 
   const [orbitAngle, setOrbitAngle] = useState(0);
   const [rangeNm, setRangeNm] = useState(spawnNm);
+
+  const lastFrameTimeRef = useRef<number | null>(null);
 
   const bearingLineDeg = bearingMode === "F-18" ? 45 : 30;
 
@@ -95,6 +98,16 @@ export default function App() {
     (maxDisplayRadiusPx - minDisplayRadiusPx) * radiusDisplayRatio;
 
   const pixelsPerNm = orbitRadiusPx / turnRadiusNm;
+
+  // Dynamic graphic height:
+  // Bottom of the box tracks the circle bottom plus about 1/2 radius.
+  // This keeps the playback slider tight to the circle without covering the graphic.
+  const graphicViewBoxWidth = 660;
+  const graphicViewBoxHeight = clamp(
+    centerY + orbitRadiusPx * 1.5 + 18,
+    490,
+    650
+  );
 
   // =========================
   // LEAD POSITION / HEADING
@@ -203,12 +216,12 @@ export default function App() {
     };
   }
 
-  function estimateSecondsToJoin() {
+  function estimateSimSecondsToJoin() {
     let r = spawnNm;
     let t = 0;
-    const dt = 0.25;
+    const dt = 0.1;
 
-    for (let i = 0; i < 60000; i++) {
+    for (let i = 0; i < 120000; i++) {
       const geo = solveGeometry(r);
 
       if (!geo.canClose || geo.closureKt <= 0) {
@@ -218,7 +231,7 @@ export default function App() {
       r -= (geo.closureKt / 3600) * dt;
       t += dt;
 
-      if (r <= 0.01) {
+      if (r <= JOIN_THRESHOLD_NM) {
         return t;
       }
     }
@@ -229,43 +242,59 @@ export default function App() {
   function resetJoin() {
     setRangeNm(spawnNm);
     setPaused(false);
+    lastFrameTimeRef.current = null;
   }
 
   // =========================
-  // SIM LOOP
+  // SIM LOOP — WALL-CLOCK ACCURATE
   // =========================
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (paused) return;
+    let animationFrameId = 0;
 
-      const dt = 0.03;
+    function step(now: number) {
+      if (lastFrameTimeRef.current === null) {
+        lastFrameTimeRef.current = now;
+      }
 
-      setOrbitAngle((a) => {
-        return (a - turnRateDegPerSecond * dt * timeScale) % 360;
-      });
+      const wallDtRaw = (now - lastFrameTimeRef.current) / 1000;
+      lastFrameTimeRef.current = now;
 
-      setRangeNm((r) => {
-        if (r <= 0) return 0;
+      // Cap big resume/background spikes so the sim does not jump.
+      const wallDt = clamp(wallDtRaw, 0, 0.1);
+      const simDt = paused ? 0 : wallDt * timeScale;
 
-        const geo = solveGeometry(r);
+      if (simDt > 0) {
+        setOrbitAngle((a) => {
+          return (a - turnRateDegPerSecond * simDt) % 360;
+        });
 
-        if (!geo.canClose || geo.closureKt <= 0) {
-          return r;
-        }
+        setRangeNm((r) => {
+          if (r <= 0) return 0;
 
-        return Math.max(
-          0,
-          r - (geo.closureKt / 3600) * dt * timeScale
-        );
-      });
-    }, 30);
+          const geo = solveGeometry(r);
 
-    return () => clearInterval(interval);
+          if (!geo.canClose || geo.closureKt <= 0) {
+            return r;
+          }
+
+          return Math.max(
+            0,
+            r - (geo.closureKt / 3600) * simDt
+          );
+        });
+      }
+
+      animationFrameId = requestAnimationFrame(step);
+    }
+
+    animationFrameId = requestAnimationFrame(step);
+
+    return () => cancelAnimationFrame(animationFrameId);
   }, [
     paused,
-    turnRateDegPerSecond,
     timeScale,
+    turnRateDegPerSecond,
     wingKIAS,
     leadAltitude,
     orbitAngle,
@@ -276,10 +305,14 @@ export default function App() {
     bearingLineDeg,
   ]);
 
+  useEffect(() => {
+    lastFrameTimeRef.current = null;
+  }, [paused, timeScale]);
+
   const currentGeo = solveGeometry(rangeNm);
 
-  const estimatedJoinSeconds = useMemo(
-    () => estimateSecondsToJoin(),
+  const estimatedSimJoinSeconds = useMemo(
+    () => estimateSimSecondsToJoin(),
     [
       spawnNm,
       wingKIAS,
@@ -418,10 +451,6 @@ export default function App() {
   const vcLabelX = rangeLabelX;
   const vcLabelY = rangeLabelY + 18;
 
-  // Fixed playback controls close under the circle instead of at the bottom
-  // of the whole graphic box.
-  const controlsY = clamp(centerY + orbitRadiusPx + 8, 426, 493);
-
   // =========================
   // STYLES
   // =========================
@@ -488,7 +517,7 @@ export default function App() {
   const graphicWrapStyle: CSSProperties = {
     width: "100%",
     maxWidth: "900px",
-    height: "560px",
+    aspectRatio: `${graphicViewBoxWidth} / ${graphicViewBoxHeight}`,
     margin: "0 auto",
     background: "#101827",
     boxShadow: "8px 8px 18px rgba(0,0,0,0.35)",
@@ -500,15 +529,11 @@ export default function App() {
     position: "relative",
   };
 
-  const playbackContainerStyle: CSSProperties = {
-    width: "100%",
-    height: "100%",
-    background: "transparent",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    pointerEvents: "auto",
+  const playbackControlStyle: CSSProperties = {
+    width: "min(420px, 88%)",
+    margin: "4px auto 0",
+    padding: "0 10px",
+    textAlign: "center",
   };
 
   const timeScaleLabelStyle: CSSProperties = {
@@ -516,7 +541,7 @@ export default function App() {
     fontWeight: 800,
     textAlign: "center",
     marginBottom: 2,
-    color: "rgba(255,255,255,0.72)",
+    color: "rgba(255,255,255,0.82)",
     textShadow: "0 1px 4px black",
     background: "transparent",
   };
@@ -532,12 +557,11 @@ export default function App() {
     padding: "5px 11px",
     borderRadius: 7,
     border: "1px solid rgba(255,255,255,0.65)",
-    background: "rgba(31,41,55,0.55)",
+    background: "rgba(31,41,55,0.65)",
     color: "white",
     cursor: "pointer",
     fontSize: 12,
     margin: "2px 5px 0",
-    backdropFilter: "blur(2px)",
   };
 
   const paramBlockStyle: CSSProperties = {
@@ -620,12 +644,8 @@ export default function App() {
             min-width: 0;
           }
 
-          .rv-graphic-wrap {
-            height: 560px;
-          }
-
-          .rv-playback-foreign {
-            overflow: visible;
+          .rv-playback-controls {
+            margin-top: 4px;
           }
 
           @media (max-width: 640px) {
@@ -645,8 +665,8 @@ export default function App() {
               width: 100%;
             }
 
-            .rv-graphic-wrap {
-              height: min(560px, calc((100vw - 20px) * 560 / 660));
+            .rv-playback-controls {
+              margin-top: 4px;
             }
           }
         `}
@@ -717,12 +737,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* GRAPHIC RIGHT NEXT TO SLIDERS */}
-        <div className="rv-graphic-wrap" style={graphicWrapStyle}>
+        {/* DYNAMIC GRAPHIC BOX */}
+        <div style={graphicWrapStyle}>
           <svg
             width="100%"
             height="100%"
-            viewBox="0 0 660 560"
+            viewBox={`0 0 ${graphicViewBoxWidth} ${graphicViewBoxHeight}`}
             preserveAspectRatio="xMidYMin meet"
             style={{
               display: "block",
@@ -734,9 +754,9 @@ export default function App() {
             {/* Top-left in-graphic timing text */}
             <text x={14} y={24} style={graphicInfoStyle}>
               Time to Join:{" "}
-              {estimatedJoinSeconds === null
+              {estimatedSimJoinSeconds === null
                 ? "Stabilizes"
-                : `${estimatedJoinSeconds.toFixed(0)} sec`}
+                : `${estimatedSimJoinSeconds.toFixed(0)} sec`}
             </text>
             <text x={14} y={42} style={graphicInfoStyle}>
               Time for 360° Turn: {orbitPeriodSeconds.toFixed(0)} sec
@@ -964,43 +984,30 @@ export default function App() {
                 transform={`rotate(${wingHeading + SPRITE_OFFSET})`}
               />
             </g>
-
-            {/* Transparent playback controls fixed just under the circle */}
-            <foreignObject
-              x={160}
-              y={controlsY}
-              width={340}
-              height={58}
-              className="rv-playback-foreign"
-            >
-              <div style={playbackContainerStyle}>
-                <div style={timeScaleLabelStyle}>{timeScale.toFixed(1)}x</div>
-
-                <input
-                  style={smallSliderStyle}
-                  type="range"
-                  min="0.1"
-                  max="10"
-                  step="0.1"
-                  value={timeScale}
-                  onChange={(e) => setTimeScale(Number(e.target.value))}
-                />
-
-                <div>
-                  <button onClick={resetJoin} style={simButtonStyle}>
-                    Restart
-                  </button>
-
-                  <button
-                    onClick={() => setPaused((p) => !p)}
-                    style={simButtonStyle}
-                  >
-                    {paused ? "Resume" : "Pause"}
-                  </button>
-                </div>
-              </div>
-            </foreignObject>
           </svg>
+        </div>
+
+        {/* PLAYBACK CONTROLS DIRECTLY BELOW DYNAMIC GRAPHIC */}
+        <div className="rv-playback-controls" style={playbackControlStyle}>
+          <div style={timeScaleLabelStyle}>{timeScale.toFixed(1)}x</div>
+
+          <input
+            style={smallSliderStyle}
+            type="range"
+            min="0.1"
+            max="10"
+            step="0.1"
+            value={timeScale}
+            onChange={(e) => setTimeScale(Number(e.target.value))}
+          />
+
+          <button onClick={resetJoin} style={simButtonStyle}>
+            Restart
+          </button>
+
+          <button onClick={() => setPaused((p) => !p)} style={simButtonStyle}>
+            {paused ? "Resume" : "Pause"}
+          </button>
         </div>
 
         {/* FIXED PARAMETERS */}
