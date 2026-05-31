@@ -427,17 +427,17 @@ export default function App() {
     background: "#111827",
     color: "white",
     fontFamily: "Arial, sans-serif",
-    padding: "18px 18px 42px",
+    padding: "14px 10px 36px",
     boxSizing: "border-box",
     overflowX: "hidden",
   };
 
   const titleStyle: CSSProperties = {
     textAlign: "center",
-    fontSize: 46,
+    fontSize: "clamp(30px, 9vw, 46px)",
     fontWeight: 800,
     color: "white",
-    margin: "0 0 22px 0",
+    margin: "0 0 14px 0",
     lineHeight: 1,
     whiteSpace: "nowrap",
   };
@@ -447,25 +447,20 @@ export default function App() {
     margin: "0 auto",
   };
 
-  const sliderRowStyle: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 14,
-    alignItems: "end",
-    width: "100%",
-    margin: "0 auto 18px",
-  };
-
-  const sliderItemStyle: CSSProperties = {
-    minWidth: 0,
-  };
-
   const sliderLabelStyle: CSSProperties = {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 700,
-    lineHeight: 1.25,
-    marginBottom: 4,
-    textAlign: "left",
+    lineHeight: 1.15,
+    textAlign: "center",
+    whiteSpace: "nowrap",
+  };
+
+  const sliderValueStyle: CSSProperties = {
+    fontSize: 17,
+    fontWeight: 800,
+    lineHeight: 1.15,
+    textAlign: "center",
+    margin: "2px 0 5px",
     whiteSpace: "nowrap",
   };
 
@@ -473,11 +468,6 @@ export default function App() {
     width: "100%",
     margin: 0,
     display: "block",
-  };
-
-  const bearingRowStyle: CSSProperties = {
-    textAlign: "center",
-    margin: "4px auto 18px",
   };
 
   const buttonStyle = (active: boolean): CSSProperties => ({
@@ -608,56 +598,51 @@ export default function App() {
 
   return (
     <div style={pageStyle}>
+      <style>
+        {`
+          .rv-bearing-row {
+            text-align: center;
+            margin: 0 auto 8px;
+          }
+
+          .rv-slider-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            align-items: end;
+            width: 100%;
+            margin: 0 auto 8px;
+          }
+
+          .rv-slider-item {
+            min-width: 0;
+          }
+
+          @media (max-width: 640px) {
+            .rv-bearing-row {
+              margin: 0 auto 6px;
+            }
+
+            .rv-slider-row {
+              display: grid;
+              grid-template-columns: 1fr;
+              gap: 8px;
+              margin: 0 auto 6px;
+              width: min(360px, 100%);
+            }
+
+            .rv-slider-item {
+              width: 100%;
+            }
+          }
+        `}
+      </style>
+
       <h1 style={titleStyle}>Rendezvous Visualizer</h1>
 
       <main style={centerColumnStyle}>
-        {/* TOP SLIDER ROW */}
-        <div style={sliderRowStyle}>
-          <div style={sliderItemStyle}>
-            <div style={sliderLabelStyle}>
-              Altitude: {leadAltitude.toLocaleString()} ft
-            </div>
-            <input
-              style={sliderStyle}
-              type="range"
-              min="0"
-              max="40000"
-              step="500"
-              value={leadAltitude}
-              onChange={(e) => setLeadAltitude(Number(e.target.value))}
-            />
-          </div>
-
-          <div style={sliderItemStyle}>
-            <div style={sliderLabelStyle}>Wing KIAS: {wingKIAS}</div>
-            <input
-              style={sliderStyle}
-              type="range"
-              min="180"
-              max="320"
-              value={wingKIAS}
-              onChange={(e) => setWingKIAS(Number(e.target.value))}
-            />
-          </div>
-
-          <div style={sliderItemStyle}>
-            <div style={sliderLabelStyle}>
-              Start Range: {spawnNm.toFixed(2)} nm
-            </div>
-            <input
-              style={sliderStyle}
-              type="range"
-              min="0.25"
-              max="5"
-              step="0.25"
-              value={spawnNm}
-              onChange={(e) => setSpawnNm(Number(e.target.value))}
-            />
-          </div>
-        </div>
-
-        {/* BEARING TOGGLE */}
-        <div style={bearingRowStyle}>
+        {/* BEARING TOGGLE ABOVE SLIDERS */}
+        <div className="rv-bearing-row">
           <button
             onClick={() => setBearingMode("F-18")}
             style={buttonStyle(bearingMode === "F-18")}
@@ -672,7 +657,53 @@ export default function App() {
           </button>
         </div>
 
-        {/* GRAPHIC */}
+        {/* TOP SLIDERS — RESPONSIVE */}
+        <div className="rv-slider-row">
+          <div className="rv-slider-item">
+            <div style={sliderLabelStyle}>Altitude</div>
+            <div style={sliderValueStyle}>
+              {leadAltitude.toLocaleString()} ft
+            </div>
+            <input
+              style={sliderStyle}
+              type="range"
+              min="0"
+              max="40000"
+              step="500"
+              value={leadAltitude}
+              onChange={(e) => setLeadAltitude(Number(e.target.value))}
+            />
+          </div>
+
+          <div className="rv-slider-item">
+            <div style={sliderLabelStyle}>Wing KIAS</div>
+            <div style={sliderValueStyle}>{wingKIAS}</div>
+            <input
+              style={sliderStyle}
+              type="range"
+              min="180"
+              max="320"
+              value={wingKIAS}
+              onChange={(e) => setWingKIAS(Number(e.target.value))}
+            />
+          </div>
+
+          <div className="rv-slider-item">
+            <div style={sliderLabelStyle}>Start Range</div>
+            <div style={sliderValueStyle}>{spawnNm.toFixed(2)} nm</div>
+            <input
+              style={sliderStyle}
+              type="range"
+              min="0.25"
+              max="5"
+              step="0.25"
+              value={spawnNm}
+              onChange={(e) => setSpawnNm(Number(e.target.value))}
+            />
+          </div>
+        </div>
+
+        {/* GRAPHIC RIGHT NEXT TO SLIDERS */}
         <div style={graphicWrapStyle}>
           <svg
             width="100%"
@@ -959,8 +990,12 @@ export default function App() {
           <div style={textStyle}>
             True Airspeed Advantage: {trueAirspeedAdvantage.toFixed(1)} kt
           </div>
-          <div style={textStyle}>Lead Airspeed (KTAS): {Math.round(leadKTAS)}</div>
-          <div style={textStyle}>Wing Airspeed (KTAS): {Math.round(wingKTAS)}</div>
+          <div style={textStyle}>
+            Lead Airspeed (KTAS): {Math.round(leadKTAS)}
+          </div>
+          <div style={textStyle}>
+            Wing Airspeed (KTAS): {Math.round(wingKTAS)}
+          </div>
         </div>
       </main>
     </div>
