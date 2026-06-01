@@ -12,13 +12,13 @@ export default function App() {
   const leadKIAS = 250;
   const bankAngle = 30;
   const g = 32.174;
-  const JOIN_THRESHOLD_NM = 0.001;
+  const JOIN_THRESHOLD_NM = 0.01;
 
   const [bearingMode, setBearingMode] = useState<BearingMode>("F-18");
   const [leadAltitude, setLeadAltitude] = useState(10000);
   const [wingKIAS, setWingKIAS] = useState(250);
   const [spawnNm, setSpawnNm] = useState(1);
-  const [timeScale, setTimeScale] = useState(4);
+  const [timeScale, setTimeScale] = useState(2.5);
   const [paused, setPaused] = useState(false);
 
   const [orbitAngle, setOrbitAngle] = useState(0);
@@ -1055,10 +1055,10 @@ export default function App() {
             <g transform={`translate(${leadX},${leadY})`}>
               <image
                 href={superHornet}
-                x={-20}
-                y={-20}
-                width={40}
-                height={40}
+                x={-15}
+                y={-8}
+                width={30}
+                height={30}
                 transform={`rotate(${leadHeading + SPRITE_OFFSET})`}
               />
             </g>
@@ -1067,10 +1067,10 @@ export default function App() {
             <g transform={`translate(${wingX},${wingY})`}>
               <image
                 href={superHornet}
-                x={-20}
-                y={-20}
-                width={40}
-                height={40}
+                x={-15}
+                y={-8}
+                width={30}
+                height={30}
                 transform={`rotate(${wingHeading + SPRITE_OFFSET})`}
               />
             </g>
